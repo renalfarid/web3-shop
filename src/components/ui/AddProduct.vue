@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue'
 import { ExclamationTriangleIcon } from '@heroicons/vue/24/outline'
-import { ethers } from "ethers"
+import { Web3 } from "web3"
 
 const props = defineProps(['open'])
 
@@ -11,16 +11,25 @@ const data = ref(null)
 const productName = ref('')
 const productThumbnail = ref('')
 const productPrice = ref(0)
+
+let web3 = new Web3("https://rpc.sepolia.org")
 const contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS
 
-let provider = ""
-if (typeof window.ethereum !== 'undefined') {
-    provider = new ethers.providers.Web3Provider(window.ethereum);
-    // Proceed with using the provider
-} else {
-    // Handle the case where MetaMask is not available
-    console.error("MetaMask or Ethereum provider not found.");
-}
+const initializeWeb3 = async () => {
+  if (window.ethereum) {
+    web3 = new Web3(window.ethereum);
+    try {
+      // Request account access
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+    } catch (error) {
+      console.error("User denied account access");
+    }
+  } else if (window.web3) {
+    web3 = new Web3(window.web3.currentProvider);
+  } else {
+    console.error("Non-Ethereum browser detected. You should consider trying MetaMask!");
+  }
+};
 
 let abiData = null
 
@@ -33,25 +42,31 @@ const fetchData = async () => {
 
 const addProduct = async () => {
   await fetchData()
-  console.log("price :", productPrice.value)
-  //const priceInCents = parseFloat(productPrice.value) * 100
-  const priceInWei = ethers.utils.parseEther(productPrice.value);
+  console.log("price :", productPrice.value.toString())
+  const priceInWei = web3.utils.toWei(productPrice.value, 'ether'); // Ensure price is in Wei
 
   try {
-    // Request accounts from MetaMask
-    //const accounts = await web3.eth.requestAccounts();
+    const contract = new web3.eth.Contract(abiData, contractAddress)
+    console.log("Contract instance:", contract);
 
-    // Create contract instance
-    const contract = new ethers.Contract(contractAddress, abiData, provider);
-    const signer = provider.getSigner();
-    const contractWithSigner = contract.connect(signer);
+    const accounts = await web3.eth.getAccounts();
+    if (accounts.length === 0) {
+      console.error("No accounts found. Ensure the wallet is connected.");
+      return;
+    }
+    console.log("Accounts:", accounts);
 
+    const transaction = await contract.methods.addItem(
+      productName.value,
+      productThumbnail.value,
+      priceInWei
+    ).send({
+      from: accounts[0],
+      gas: 500000 // Adjust gas limit as necessary
+    });
 
-    // Call addItem function from the smart contract
-    const transaction = await contractWithSigner.addItem(productName.value, productThumbnail.value, priceInWei);
-    transaction.wait()
-    alert('Product added successfully', transaction)
-    open.value = false
+    alert('Product added successfully', transaction);
+    open.value = false;
   } catch (error) {
     console.error('Error adding product:', error);
   }
@@ -59,6 +74,7 @@ const addProduct = async () => {
 
 onMounted(() => {
   open.value = props.open
+  initializeWeb3()
 })
 
 

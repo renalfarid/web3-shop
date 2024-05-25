@@ -1,8 +1,6 @@
 <script setup>
   import Announcement from "./ui/Announcement.vue"
   import HeaderShop from "./ui/HeaderShop.vue"
-  import AddProduct from "./ui/AddProduct.vue"
-  import { ethers } from "ethers"
   import { onMounted, ref } from "vue"
   import { Web3 } from "web3"
 
