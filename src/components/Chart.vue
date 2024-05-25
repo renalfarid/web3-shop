@@ -3,36 +3,91 @@
   import HeaderShop from "./ui/HeaderShop.vue"
   import AddProduct from "./ui/AddProduct.vue"
   import { ethers } from "ethers"
-import { onMounted, ref } from "vue";
+  import { onMounted, ref } from "vue"
+  import { Web3 } from "web3"
 
   const products = ref([])
   const data = ref(null)
+
+  const web3 = new Web3("https://rpc.sepolia.org");
+
   const contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS
-  
 
-let provider = ""
-if (typeof window.ethereum !== 'undefined') {
-    provider = new ethers.providers.Web3Provider(window.ethereum);
-    // Proceed with using the provider
-} else {
-    // Handle the case where MetaMask is not available
-    console.error("MetaMask or Ethereum provider not found.");
-}
+  let abiData = null
 
-
-
-let abiData = null
-
-const fetchData = async () => {
+  const fetchData = async () => {
     const response = await fetch('/data.json')
     data.value = await response.json()
     abiData = data.value.abi
-    console.log("Data: ", abiData)
-}
+    //console.log("Data: ", abiData)
+  }
 
-const getProduct = async () => {
+  const getProduct = async () => {
+    await fetchData()
+    const contract = new web3.eth.Contract(abiData, contractAddress)
+    console.log("Contract instance:", contract);
+
+
+    try {
+    const itemCount = await contract.methods.itemCount().call(); // Get the total number of items
+      const items = [];
+      for (let i = 1; i <= itemCount; i++) {
+         const item = await contract.methods.getItem(i).call(); // Get each individual item
+         console.log("item: ", item)
+         products.value.push({
+          id: Number(item[0]),  // Convert BigInt to number
+          name: item[1],
+          thumbnail: item[2],
+          price: web3.utils.fromWei(item[3].toString(), 'ether'),  // Convert BigInt to string for fromWei
+          owner: item[4]
+         })
+         /* products.value.push({
+            id: item[0].toNumber(), // Convert BigNumber to number
+            name: item[1],
+            thumbnail: item[2],
+            price: ethers.utils.formatEther(item[3]), // Convert BigNumber to ether (string)
+            owner: item[4]
+          }); */
+      }
+      console.log("All items:", products.value);
+      return items;
+    } catch (error) {
+      console.error("Error fetching items:", error);
+      throw error;
+    }
+
+  }
+
+
+  
+  /* let provider = ""
+  //await provider.send('eth_requestAccounts', []); // <- this promps user to connect metamask
+  if (typeof window.ethereum !== 'undefined') {
+    provider = new ethers.providers.Web3Provider(window.ethereum);
+    // Proceed with using the provider
+  } else {
+    // Handle the case where MetaMask is not available
+    console.error("MetaMask or Ethereum provider not found.");
+  }
+  
+
+  console.log("provider: ", provider)
+
+  let abiData = null
+
+  const fetchData = async () => {
+    const response = await fetch('/data.json')
+    data.value = await response.json()
+    abiData = data.value.abi
+    //console.log("Data: ", abiData)
+  }
+
+  const getProduct = async () => {
    await fetchData();
    const contract = new ethers.Contract(contractAddress, abiData, provider);
+   //const wallet = new ethers.Wallet(contractAddress, abiData)
+   //console.log("contract: ", contract)
+   //const signer = wallet.provider(wallet.address)
    const signer = provider.getSigner();
    const contractWithSigner = contract.connect(signer);
 
@@ -55,8 +110,8 @@ const getProduct = async () => {
    } catch (error) {
       console.error("Error fetching items:", error);
       throw error;
-   }
-}
+   } 
+  }*/
 
 const buyProduct = async (productId) => {
   await fetchData();
@@ -73,10 +128,10 @@ const buyProduct = async (productId) => {
     console.log("Sending transaction with price:", ethers.utils.formatEther(price));
 
     // Check if the item can be purchased
-    if (product.owner === await signer.getAddress()) {
+    /*if (product.owner === await signer.getAddress()) {
       alert('You cannot buy your own item.');
       return;
-    }
+    }*/
 
     // Execute the purchase
     const transaction = await contract.purchaseItem(productId, {
@@ -99,8 +154,6 @@ const buyProduct = async (productId) => {
     throw error;
   }
 };
-
-
 
 onMounted(async () => {
     await getProduct()
