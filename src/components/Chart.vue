@@ -9,7 +9,7 @@
   const products = ref([])
   const data = ref(null)
 
-  const web3 = new Web3("https://rpc.sepolia.org");
+  let web3 = new Web3("https://rpc.sepolia.org");
 
   const contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS
 
@@ -21,6 +21,22 @@
     abiData = data.value.abi
     //console.log("Data: ", abiData)
   }
+
+  const initializeWeb3 = async () => {
+  if (window.ethereum) {
+    web3 = new Web3(window.ethereum);
+    try {
+      // Request account access
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+    } catch (error) {
+      console.error("User denied account access");
+    }
+  } else if (window.web3) {
+    web3 = new Web3(window.web3.currentProvider);
+  } else {
+    console.error("Non-Ethereum browser detected. You should consider trying MetaMask!");
+  }
+};
 
   const getProduct = async () => {
     await fetchData()
@@ -114,18 +130,22 @@
   }*/
 
 const buyProduct = async (productId) => {
-  await fetchData();
-  const provider = new ethers.providers.Web3Provider(window.ethereum);
+  await fetchData()
+  const contract = new web3.eth.Contract(abiData, contractAddress)
+  console.log("Contract instance:", contract);
+
+  /* const provider = new ethers.providers.Web3Provider(window.ethereum);
   const signer = provider.getSigner();
-  const contract = new ethers.Contract(contractAddress, abiData, signer);
+  const contract = new ethers.Contract(contractAddress, abiData, signer);*/
 
   try {
     // Fetch the product details
-    const product = await contract.items(productId);
-    const price = product.price;
+    const product = await contract.methods.items(productId).call();
+    const price = product.price.toString();
 
     console.log("Product details:", product);
-    console.log("Sending transaction with price:", ethers.utils.formatEther(price));
+    console.log("Sending transaction with price (in Wei):", price);
+
 
     // Check if the item can be purchased
     /*if (product.owner === await signer.getAddress()) {
@@ -134,12 +154,18 @@ const buyProduct = async (productId) => {
     }*/
 
     // Execute the purchase
-    const transaction = await contract.purchaseItem(productId, {
-      value: price,
-      gasLimit: ethers.utils.hexlify(500000), // Adjust as necessary
+    const accounts = await web3.eth.getAccounts();
+    if (accounts.length === 0) {
+      console.error("No accounts found. Ensure the wallet is connected.");
+      return;
+    }
+    console.log("Accounts:", accounts);
+    const transaction = await contract.methods.purchaseItem(productId).send({
+      from: accounts[0],
+      value: price,  // Send value in Wei
+      gas: 500000 // Adjust as necessary
     });
 
-    await transaction.wait(); // Wait for the transaction to be mined
     alert('Product purchased successfully');
   } catch (error) {
     console.error("Error purchasing item:", error);
@@ -156,6 +182,7 @@ const buyProduct = async (productId) => {
 };
 
 onMounted(async () => {
+    await initializeWeb3()
     await getProduct()
 })
 
